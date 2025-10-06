@@ -215,9 +215,16 @@ public class CloudReplica extends Replica {
         String cluster = null;
         ConnectContext context = ConnectContext.get();
         if (context != null) {
-            if (!Strings.isNullOrEmpty(context.getSessionVariable().getCloudCluster())) {
-                cluster = ((CloudSystemInfoService) Env.getCurrentSystemInfo())
-                    .getPhysicalCluster(context.getSessionVariable().getCloudCluster());
+            // TODO(wb) rethinking whether should update err status.
+            cluster = ((CloudSystemInfoService) Env.getCurrentSystemInfo())
+                    .getPhysicalCluster(context.getCloudCluster());
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("get compute group by context {}", cluster);
+            }
+
+            UserIdentity currentUid = context.getCurrentUserIdentity();
+            if (currentUid != null && !StringUtils.isEmpty(currentUid.getQualifiedUser())) {
                 try {
                     ((CloudEnv) Env.getCurrentEnv()).checkCloudClusterPriv(cluster);
                 } catch (Exception e) {
