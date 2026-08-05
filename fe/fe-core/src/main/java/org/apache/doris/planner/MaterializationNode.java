@@ -29,7 +29,6 @@ import org.apache.doris.planner.LocalExchangeNode.LocalExchangeTypeRequire;
 import org.apache.doris.qe.ConnectContext;
 import org.apache.doris.resource.computegroup.ComputeGroup;
 import org.apache.doris.system.Backend;
-import org.apache.doris.system.BeSelectionPolicy;
 import org.apache.doris.thrift.TColumn;
 import org.apache.doris.thrift.TExplainLevel;
 import org.apache.doris.thrift.TMaterializationNode;
@@ -144,19 +143,23 @@ public class MaterializationNode extends PlanNode {
     }
 
     public void initNodeInfo() {
-        BeSelectionPolicy policy = new BeSelectionPolicy.Builder()
-                .needQueryAvailable()
-                .setRequireAliveBe()
-                .build();
-        nodesInfo = new TPaloNodesInfo();
         ConnectContext context = ConnectContext.get();
         if (context == null) {
             context = new ConnectContext();
         }
         ComputeGroup computeGroup = context.getComputeGroupSafely();
-        for (Backend backend : policy.getCandidateBackends(computeGroup.getBackendList())) {
+        nodesInfo = createQueryAvailableNodesInfo(computeGroup);
+    }
+
+    static TPaloNodesInfo createQueryAvailableNodesInfo(ComputeGroup computeGroup) {
+        TPaloNodesInfo nodesInfo = new TPaloNodesInfo();
+        for (Backend backend : computeGroup.getBackendList()) {
+            if (!backend.isQueryAvailable()) {
+                continue;
+            }
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
+        return nodesInfo;
     }
 
     @Override
