@@ -38,6 +38,7 @@ import org.apache.doris.common.FeConstants;
 import org.apache.doris.common.Pair;
 import org.apache.doris.nereids.NereidsPlanner;
 import org.apache.doris.nereids.StatementContext;
+import org.apache.doris.nereids.exceptions.AnalysisException;
 import org.apache.doris.nereids.glue.translator.PhysicalPlanTranslator;
 import org.apache.doris.nereids.glue.translator.PlanTranslatorContext;
 import org.apache.doris.nereids.parser.NereidsParser;
@@ -674,6 +675,36 @@ public class ExplainTableStreamPlanTest extends TestWithFeService {
         Assertions.assertDoesNotThrow(() -> PlanChecker.from(connectContext)
                 .analyze("select tbl_dup_stream_base.k1, tbl_dup_stream_base.* "
                         + "from test_stream.tbl_dup_stream_base for version as of 1001"));
+    }
+
+    @Test
+    public void testRejectStreamAfterSameNameBaseTableRecreation() throws Exception {
+        createTable("create table test_stream.tbl_stream_identity_base ("
+                + "id int, old_value int) "
+                + "unique key(id) distributed by hash(id) buckets 1 "
+                + "properties(\"replication_num\"=\"1\","
+                + "\"enable_unique_key_merge_on_write\"=\"true\","
+                + "\"binlog.enable\"=\"true\",\"binlog.format\"=\"ROW\","
+                + "\"binlog.need_historical_value\"=\"true\")");
+        createTable("create stream test_stream.s_stream_identity "
+                + "on table test_stream.tbl_stream_identity_base");
+
+        Assertions.assertDoesNotThrow(
+                () -> getFragment("explain select old_value from test_stream.s_stream_identity"));
+        Database db = (Database) Env.getCurrentInternalCatalog().getDbOrMetaException("test_stream");
+        long originalBaseTableId = db.getTableOrMetaException("tbl_stream_identity_base").getId();
+
+        dropTable("test_stream.tbl_stream_identity_base", false);
+        createTable("create table test_stream.tbl_stream_identity_base ("
+                + "id int, new_value int) "
+                + "duplicate key(id) distributed by hash(id) buckets 1 "
+                + "properties(\"replication_num\"=\"1\")");
+        long recreatedBaseTableId = db.getTableOrMetaException("tbl_stream_identity_base").getId();
+        Assertions.assertNotEquals(originalBaseTableId, recreatedBaseTableId);
+
+        AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                () -> getFragment("explain select old_value from test_stream.s_stream_identity"));
+        Assertions.assertEquals("Unknown base table 'tbl_stream_identity_base'", exception.getMessage());
     }
 
     private Map<Long, Long> buildTabletIdToPartitionId(OlapTable baseTable) {

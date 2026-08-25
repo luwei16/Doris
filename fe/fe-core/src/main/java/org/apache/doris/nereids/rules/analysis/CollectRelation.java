@@ -237,7 +237,7 @@ public class CollectRelation implements AnalysisRuleFactory {
         }
         // we need to collect stream table's base table as well
         if (table instanceof BaseTableStream) {
-            collectFromTableStream((BaseTableStream) table, cascadesContext, tableFrom, unboundRelation);
+            collectFromTableStream((BaseTableStream) table, cascadesContext);
         }
     }
 
@@ -313,10 +313,13 @@ public class CollectRelation implements AnalysisRuleFactory {
         parentContext.addPlanProcesses(viewContext.getPlanProcesses());
     }
 
-    private void collectFromTableStream(BaseTableStream tableStream, CascadesContext cascadesContext,
-                                        TableFrom tableFrom, Optional<UnboundRelation> unboundRelation) {
+    private void collectFromTableStream(BaseTableStream tableStream, CascadesContext cascadesContext) {
         StatementContext statementContext = cascadesContext.getConnectContext().getStatementContext();
-        List<String> tableQualifier = tableStream.getBaseTableFullQualifiers();
-        statementContext.getAndCacheTable(tableQualifier, tableFrom, unboundRelation);
+        TableIf baseTable = tableStream.getBaseTableInfo().getTableNullable();
+        if (baseTable == null) {
+            throw new AnalysisException(String.format("Unknown base table '%s'",
+                    tableStream.getBaseTableInfo().getTableName()));
+        }
+        statementContext.registerTableStreamBaseTable(tableStream.getId(), baseTable);
     }
 }

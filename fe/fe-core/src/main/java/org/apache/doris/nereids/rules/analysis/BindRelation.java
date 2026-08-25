@@ -331,8 +331,13 @@ public class BindRelation extends OneAnalysisRuleFactory {
     }
 
     private LogicalOlapTableStreamScan makeOlapTableStreamScan(OlapTableStream olapTableStream,
-            UnboundRelation unboundRelation, List<String> qualifier) {
-        OlapTable baseTable = (OlapTable) olapTableStream.getBaseTableOrNereidsAnalysisException();
+            UnboundRelation unboundRelation, List<String> qualifier, StatementContext statementContext) {
+        OlapTable baseTable = (OlapTable) Preconditions.checkNotNull(
+                statementContext.getTableStreamBaseTable(olapTableStream.getId()));
+        if (baseTable.isDropped) {
+            throw new AnalysisException(String.format("Unknown base table '%s'",
+                    olapTableStream.getBaseTableInfo().getTableName()));
+        }
         List<Long> partIds = getPartitionIds(baseTable, unboundRelation, qualifier);
         List<Long> selectedPartitionIds = CollectionUtils.isEmpty(partIds) ? baseTable.getPartitionIds() : partIds;
         OlapTableStreamWrapper wrapper = new OlapTableStreamWrapper(olapTableStream, baseTable, selectedPartitionIds);
@@ -1026,7 +1031,7 @@ public class BindRelation extends OneAnalysisRuleFactory {
             }
             OlapTableStream olapTableStream = (OlapTableStream) table;
             LogicalOlapTableStreamScan scan = makeOlapTableStreamScan(olapTableStream,
-                    unboundRelation, qualifier);
+                    unboundRelation, qualifier, statementContext);
             if (scan.isIncremental() && isScanAppendOnlyTableStream(olapTableStream)) {
                 LOG.debug("Add append only filter on olap scan if need.");
                 return addAppendOnlyFilter(scan);

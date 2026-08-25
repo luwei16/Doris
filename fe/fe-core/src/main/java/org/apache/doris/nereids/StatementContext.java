@@ -219,6 +219,8 @@ public class StatementContext implements Closeable {
 
     // tables in this query directly
     private final Map<List<String>, TableIf> tables = Maps.newHashMap();
+    // base tables resolved by the persisted identities of table streams
+    private final Map<Long, TableIf> tableStreamBaseTables = Maps.newHashMap();
     // onelevel tables in this query directly,
     // if
     // create v1 as select * from t1
@@ -440,6 +442,14 @@ public class StatementContext implements Closeable {
 
     public Map<List<String>, TableIf> getTables() {
         return tables;
+    }
+
+    public void registerTableStreamBaseTable(long tableStreamId, TableIf baseTable) {
+        tableStreamBaseTables.put(tableStreamId, baseTable);
+    }
+
+    public TableIf getTableStreamBaseTable(long tableStreamId) {
+        return tableStreamBaseTables.get(tableStreamId);
     }
 
     public Map<List<String>, TableIf> getOneLevelTables() {
@@ -959,14 +969,17 @@ public class StatementContext implements Closeable {
      */
     public synchronized void lock() {
         if (!needLockTables
-                || (tables.isEmpty() && mtmvRelatedTables.isEmpty() && insertTargetTables.isEmpty())
+                || (tables.isEmpty() && tableStreamBaseTables.isEmpty()
+                        && mtmvRelatedTables.isEmpty() && insertTargetTables.isEmpty())
                 || !plannerResources.isEmpty()) {
             return;
         }
         PriorityQueue<TableIf> tableIfs = new PriorityQueue<>(
-                tables.size() + mtmvRelatedTables.size() + insertTargetTables.size(),
+                tables.size() + tableStreamBaseTables.size()
+                        + mtmvRelatedTables.size() + insertTargetTables.size(),
                 Comparator.comparing(TableIf::getId));
         tableIfs.addAll(tables.values());
+        tableIfs.addAll(tableStreamBaseTables.values());
         tableIfs.addAll(mtmvRelatedTables.values());
         tableIfs.addAll(insertTargetTables.values());
         while (!tableIfs.isEmpty()) {
