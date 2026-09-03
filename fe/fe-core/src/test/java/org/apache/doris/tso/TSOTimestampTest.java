@@ -59,6 +59,16 @@ public class TSOTimestampTest {
     }
 
     @Test
+    public void testComposePhysicalTimestampUsesZeroLogicalCounter() {
+        long physicalTime = 1625097600000L;
+
+        long composed = TSOTimestamp.composePhysicalTimestamp(physicalTime);
+
+        Assert.assertEquals(physicalTime, TSOTimestamp.extractPhysicalTime(composed));
+        Assert.assertEquals(0L, TSOTimestamp.extractLogicalCounter(composed));
+    }
+
+    @Test
     public void testBitWidthLimitations() {
         // Test that values are properly masked to fit in their respective bit widths
         long largePhysicalTime = (1L << 46) + 1000L; // Larger than 46 bits
